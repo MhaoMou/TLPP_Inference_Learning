@@ -47,11 +47,11 @@ class Logic_Model(nn.Module):
 
         head_predicate_idx = 0
         self.model_parameter[head_predicate_idx] = {}
-        self.model_parameter[head_predicate_idx]['base'] = torch.autograd.Variable((torch.ones(1) * -0.35).double(), requires_grad=True)
+        self.model_parameter[head_predicate_idx]['base'] = torch.autograd.Variable((torch.ones(1) * -0.43).double(), requires_grad=True)
 
         formula_idx = 0
         self.model_parameter[head_predicate_idx][formula_idx] = {}
-        self.model_parameter[head_predicate_idx][formula_idx]['weight'] = torch.autograd.Variable((torch.ones(1) * 0.85).double(), requires_grad=True)
+        self.model_parameter[head_predicate_idx][formula_idx]['weight'] = torch.autograd.Variable((torch.ones(1) * 0.83).double(), requires_grad=True)
 
 
         '''
@@ -59,19 +59,19 @@ class Logic_Model(nn.Module):
         '''
         head_predicate_idx = 1
         self.model_parameter[head_predicate_idx] = {}
-        self.model_parameter[head_predicate_idx]['base'] = torch.autograd.Variable((torch.ones(1) * -0.23).double(), requires_grad=True)
+        self.model_parameter[head_predicate_idx]['base'] = torch.autograd.Variable((torch.ones(1) * -0.33).double(), requires_grad=True)
 
         formula_idx = 0
         self.model_parameter[head_predicate_idx][formula_idx] = {}
-        self.model_parameter[head_predicate_idx][formula_idx]['weight'] = torch.autograd.Variable((torch.ones(1) * 0.27).double(), requires_grad=True)
+        self.model_parameter[head_predicate_idx][formula_idx]['weight'] = torch.autograd.Variable((torch.ones(1) * 0.23).double(), requires_grad=True)
 
         head_predicate_idx = 2
         self.model_parameter[head_predicate_idx] = {}
-        self.model_parameter[head_predicate_idx]['base'] = torch.autograd.Variable((torch.ones(1) * -0.24).double(), requires_grad=True)
+        self.model_parameter[head_predicate_idx]['base'] = torch.autograd.Variable((torch.ones(1) * -0.33).double(), requires_grad=True)
 
         formula_idx = 0
         self.model_parameter[head_predicate_idx][formula_idx] = {}
-        self.model_parameter[head_predicate_idx][formula_idx]['weight'] = torch.autograd.Variable((torch.ones(1) * 1.08).double(), requires_grad=True)
+        self.model_parameter[head_predicate_idx][formula_idx]['weight'] = torch.autograd.Variable((torch.ones(1) * 0.97).double(), requires_grad=True)
 
 
 
@@ -168,8 +168,8 @@ class Logic_Model(nn.Module):
         transition_time_dic = {}
         feature = torch.tensor([0], dtype=torch.float64)
         for idx, body_predicate_idx in enumerate(template['body_predicate_idx']):
-            transition_time = np.array(history[body_predicate_idx]['time'])
-            transition_state = np.array(history[body_predicate_idx]['state'])
+            transition_time = np.array(history[body_predicate_idx]['time'][1:])
+            transition_state = np.array(history[body_predicate_idx]['state'][1:])
             mask = (transition_time <= cur_time) * (transition_state == template['body_predicate_sign'][idx])
             transition_time_dic[body_predicate_idx] = transition_time[mask]
         transition_time_dic[head_predicate_idx] = [cur_time]
@@ -203,8 +203,8 @@ class Logic_Model(nn.Module):
     def get_formula_effect(self, cur_time, head_predicate_idx, history, template):
         ## Note this part is very important!! For generator, this should be np.sum(cur_time > head_transition_time) - 1
         ## Since at the transition times, choose the intensity function right before the transition time
-        head_transition_time = np.array(history[head_predicate_idx]['time'])
-        head_transition_state = np.array(history[head_predicate_idx]['state'])
+        head_transition_time = np.array(history[head_predicate_idx]['time'][1:])
+        head_transition_state = np.array(history[head_predicate_idx]['state'][1:])
         if len(head_transition_time) == 0:
             cur_state = 0
             counter_state = 1 - cur_state
@@ -243,7 +243,7 @@ class Logic_Model(nn.Module):
 
     def intensity_log_sum(self, head_predicate_idx, data_sample):
         intensity_transition = []
-        for t in data_sample[head_predicate_idx]['time']:
+        for t in data_sample[head_predicate_idx]['time'][1:]:
             #NOTE: compute the intensity at transition times
             cur_intensity:torch.tensor = self.intensity(t, head_predicate_idx, data_sample)
             intensity_transition.append(cur_intensity)
@@ -281,20 +281,21 @@ if __name__ == '__main__':
     from TLPP_Generation import Logic_Model_Generator
 
     #TODO: learn the model with complete data
-    np.random.seed(123)
+    np.random.seed(100)
     logic_model_generator = Logic_Model_Generator()
 
     #NOTE: some parameters
-    num_samples = 400
-    time_horizon = 8
-    batch_size = 128
+    num_samples = 10
+    time_horizon = 20
+    batch_size = 10
     num_batch = num_samples // batch_size
     num_iter = 600
-    lr = 1e-4
+    lr = 1e-3
 
     #TODO: generate data
     data,intensity = logic_model_generator.generate_data(num_sample=num_samples, time_horizon=time_horizon)
     print('data is generated!')
+    print(data)
     #data = np.load('data.npy', allow_pickle='TRUE').item()  # load the generated data
 
     #TODO: learn the model with complete data
@@ -312,6 +313,8 @@ if __name__ == '__main__':
     optimizer = optim.Adam(params=model_parameters, lr=lr)
     #optimizer = optim.SGD(params=model_parameters, lr=lr)
     print('start training!')
+    print(logic_model.log_likelihood(data,sample_ID_batch=np.arange(0,len(data),1),T_max=time_horizon))
+    
     for iter in tqdm(range(num_iter)):
         loss = 0
         tmp = []

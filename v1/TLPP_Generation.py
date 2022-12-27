@@ -163,8 +163,8 @@ class Logic_Model_Generator:
         transition_time_dic = {}
         feature = 0
         for idx, body_predicate_idx in enumerate(template['body_predicate_idx']):
-            transition_time = np.array(history[body_predicate_idx]['time'])
-            transition_state = np.array(history[body_predicate_idx]['state'])
+            transition_time = np.array(history[body_predicate_idx]['time'][1:])
+            transition_state = np.array(history[body_predicate_idx]['state'][1:])
             mask = (transition_time <= cur_time) * (transition_state == template['body_predicate_sign'][idx]) # find corresponding history
             transition_time_dic[body_predicate_idx] = transition_time[mask]
         transition_time_dic[head_predicate_idx] = [cur_time]
@@ -195,8 +195,8 @@ class Logic_Model_Generator:
     def get_formula_effect(self, cur_time, head_predicate_idx, history, template):
         ## Note this part is very important!! For generator, this should be np.sum(cur_time > head_transition_time) - 1
         ## Since at the transition times, choose the intensity function right before the transition time
-        head_transition_time = np.array(history[head_predicate_idx]['time'])
-        head_transition_state = np.array(history[head_predicate_idx]['state'])
+        head_transition_time = np.array(history[head_predicate_idx]['time'][1:])
+        head_transition_state = np.array(history[head_predicate_idx]['state'][1:])
         if len(head_transition_time) == 0:
             cur_state = 0
             counter_state = 1 - cur_state
@@ -253,32 +253,34 @@ class Logic_Model_Generator:
             #print('the maximum intensity is {}'.format(intensity_max))  # print the envelop
             # generate events via accept and reject
             t = 0   # cur_time
+            sep = 0.03
             while t < time_horizon:
+                grid = np.arange(t,time_horizon,sep)
                 intensity_potential = []
-                for head_predicate_idx in self.head_predicate_set:
-                    '''
-                    data[sample_ID][head_predicate_idx] = {}
-                    data[sample_ID][head_predicate_idx]['time'] = [0]
-                    data[sample_ID][head_predicate_idx]['state'] = [0]
-                    '''
-
-                    # obtain the maximal intensity
-                    #NOTE: the intensity for each head predicate is time-dependent
-                    intensity_potential.append(self.intensity(t, head_predicate_idx, data[sample_ID]))
-                    intensity_max = max(intensity_potential)
-                    #print(intensity_potential)
+                for time in grid:
+                    intensity_potential.append([self.intensity(time,head_predicate_idx,data[sample_ID]) for head_predicate_idx in self.head_predicate_set])
+                #print(intensity_potential)
+                intensity_potential = [sum(item) for item in intensity_potential]
+                intensity_max = np.max(np.array(intensity_potential))
+                #print(intensity_potential)
 
                 time_to_event = np.random.exponential(scale=1.0/intensity_max)  # sample the interarrival time
                 t = t + time_to_event
                 if t > time_horizon: break  #NOTE: the next event time exceeds the time horizon
-                #ratio = min(self.intensity(t, head_predicate_idx, data[sample_ID]) / intensity_max, 1)
-                tmp = np.random.multinomial(1,pvals=np.array(intensity_potential)/sum(np.array(intensity_potential)))
-                idx = np.argmax(tmp)
-               
+                
+                # accept reject
+                intensity_potential = []
+                for head_predicate_idx in self.head_predicate_set:
+                    intensity_potential.append(self.intensity(t, head_predicate_idx, data[sample_ID]))
 
-                data[sample_ID][idx]['time'].append(t)
-                cur_state = 1 - data[sample_ID][idx]['state'][-1]    # state transition
-                data[sample_ID][idx]['state'].append(cur_state)      # append the new state
+                if (np.random.uniform() < np.sum(np.array(intensity_potential))/intensity_max):
+                    #print(np.sum(np.array(intensity_potential))/intensity_max)
+                    tmp = np.random.multinomial(1,pvals=np.array(intensity_potential)/np.sum(np.array(intensity_potential)))
+                    idx = np.argmax(tmp)
+                
+                    data[sample_ID][idx]['time'].append(t)
+                    cur_state = 1 - data[sample_ID][idx]['state'][-1]    # state transition
+                    data[sample_ID][idx]['state'].append(cur_state)      # append the new state
 
         intensity = self.compute_intensity(data,time_horizon)
         return data, intensity
